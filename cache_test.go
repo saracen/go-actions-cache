@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,82 @@ import (
 func init() {
 	Log = log.Printf
 }
+
+func TestStuffUpload(t *testing.T) {
+	c, err := TryEnv(Opt{})
+	require.NoError(t, err)
+	if c == nil {
+		t.SkipNow()
+	}
+
+	ctx := context.Background()
+
+	// The cache content was partially missing or did not match the expected size.
+	// invalid status response 416 The range specified is invalid for the current size of the resource.
+	id, err := c.reserve(ctx, strings.Repeat("a", 1024))
+	require.NoError(t, err)
+
+	b := NewBlob(make([]byte, 20000))
+	require.NoError(t, c.uploadChunk(ctx, id, b, 0, 20000))
+	require.NoError(t, c.commit(ctx, id, 20000))
+
+	/*entry, err := c.Load(ctx, "cache-test-21")
+	require.NoError(t, err)
+
+	now := time.Now()
+	require.NoError(t, entry.WriteTo(ctx, io.Discard))
+	fmt.Println("download time", time.Since(now))*/
+}
+
+func TestStuffDownload(t *testing.T) {
+	c, err := TryEnv(Opt{})
+	require.NoError(t, err)
+	if c == nil {
+		t.SkipNow()
+	}
+
+	ctx := context.Background()
+
+	entry, err := c.Load(ctx, "cache-test-20")
+	require.NoError(t, err)
+
+	now := time.Now()
+	rc := entry.Download(ctx)
+	_, err = rc.ReadAt(make([]byte, 10000), 10000)
+	if err == io.EOF {
+		err = nil
+	}
+	require.NoError(t, err)
+	rc.Close()
+	//require.NoError(t, entry.WriteTo(ctx, io.Discard))
+	fmt.Println("download time", time.Since(now))
+}
+
+/*func TestStuff(t *testing.T) {
+	c, err := TryEnv(Opt{})
+	require.NoError(t, err)
+	if c == nil {
+		t.SkipNow()
+	}
+
+	ctx := context.Background()
+
+	// The cache content was partially missing or did not match the expected size.
+	id, err := c.reserve(ctx, "cache-test-20")
+	require.NoError(t, err)
+
+	b := NewBlob(make([]byte, 20000))
+
+	for i := 0; i < 20000; i += 2 {
+		require.NoError(t, c.uploadChunk(ctx, id, b, int64(i), 2), fmt.Sprintf("chunk %d", i))
+		//time.Sleep(500 * time.Millisecond)
+	}
+
+	//require.NoError(t, c.uploadChunk(ctx, id, b, 5, 5))
+	//require.NoError(t, c.uploadChunk(ctx, id, b, 0, 5))
+	//require.NoError(t, c.uploadChunk(ctx, id, b, 5, 5))
+	require.NoError(t, c.commit(ctx, id, 20000))
+}*/
 
 func TestTokenScopes(t *testing.T) {
 	// this token is expired
